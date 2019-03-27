@@ -2,9 +2,13 @@
 
 import argparse
 import sys
+import os
 import logging
+import json
 from logging import config
 from ndexutil.config import NDExUtilConfig
+import ndex2
+from ndex2.client import Ndex2
 import ndexcptacenrichloader
 
 logger = logging.getLogger(__name__)
@@ -13,6 +17,12 @@ TSV2NICECXMODULE = 'ndexutil.tsv.tsv2nicecx2'
 
 LOG_FORMAT = "%(asctime)-15s %(levelname)s %(relativeCreated)dms " \
              "%(filename)s::%(funcName)s():%(lineno)d %(message)s"
+
+
+TYPE_MAP = {'GeneProduct': 'protein',
+            'Protein': 'protein',
+            'Group': 'complex'}
+
 
 def _parse_arguments(desc, args):
     """
@@ -42,6 +52,8 @@ def _parse_arguments(desc, args):
     parser.add_argument('--conf', help='Configuration file to load '
                                        '(default ~/' +
                                        NDExUtilConfig.CONFIG_FILE)
+    parser.add_argument('--style', help='Path to NDEx CX file to use for styling'
+                                        'networks', required=True)
     parser.add_argument('--verbose', '-v', action='count', default=0,
                         help='Increases verbosity of logger to standard '
                              'error for log messages in this module and'
@@ -85,16 +97,28 @@ class NDExCPTACLoader(object):
     """
     Class to load content
     """
+
+    SOURCE_PREFIX='source_'
+    NETWORKSET='networkset'
+
     def __init__(self, args):
         """
 
         :param args:
         """
+        self._args = args
         self._conf_file = args.conf
         self._profile = args.profile
+        self._ndex = None
+        self._sourcendex = None
         self._user = None
         self._pass = None
         self._server = None
+        self._sourceuser = None
+        self._sourcepass = None
+        self._sourceserver = None
+        self._sourcenetworkset = None
+        self._template = None
 
     def _parse_config(self):
             """
@@ -106,7 +130,129 @@ class NDExCPTACLoader(object):
             self._user = con.get(self._profile, NDExUtilConfig.USER)
             self._pass = con.get(self._profile, NDExUtilConfig.PASSWORD)
             self._server = con.get(self._profile, NDExUtilConfig.SERVER)
+            self._sourceuser = con.get(self._profile,
+                                       NDExCPTACLoader.SOURCE_PREFIX +
+                                       NDExUtilConfig.USER)
+            self._sourcepass = con.get(self._profile,
+                                       NDExCPTACLoader.SOURCE_PREFIX +
+                                       NDExUtilConfig.PASSWORD)
+            self._sourceserver = con.get(self._profile,
+                                         NDExCPTACLoader.SOURCE_PREFIX +
+                                         NDExUtilConfig.SERVER)
+            self._sourcenetworkset = con.get(self._profile,
+                                         NDExCPTACLoader.SOURCE_PREFIX +
+                                         NDExCPTACLoader.NETWORKSET)
 
+    def _get_user_agent(self):
+        """
+
+        :return:
+        """
+        return 'cptac/' + self._args.version
+
+    def _create_ndex_connection(self):
+        """
+        creates connection to ndex
+        :return:
+        """
+        if self._ndex is None:
+            self._ndex = Ndex2(host=self._server, username=self._user,
+                               password=self._pass,
+                               user_agent=self._get_user_agent())
+
+    def _create_sourcendex_connection(self):
+        """
+        creates connection to ndex
+        :return:
+        """
+        if self._sourcendex is None:
+            self._sourcendex = Ndex2(host=self._sourceserver, username=self._sourceuser,
+                                     password=self._sourcepass,
+                                     user_agent=self._get_user_agent())
+
+    def _load_style_template(self):
+        """
+        Loads the CX network specified by self._args.style into self._template
+        :return:
+        """
+        self._template = ndex2.create_nice_cx_from_file(os.path.abspath(self._args.style))
+
+    def _load_network_summaries_for_user(self):
+        """
+        Gets a dictionary of all networks for user account
+        <network name upper cased> => <NDEx UUID>
+        :return: dict
+        """
+        net_summaries = self._ndex.get_network_summaries_for_user(self._user)
+        self._net_summaries = {}
+        for nk in net_summaries:
+            if nk.get('name') is not None:
+                self._net_summaries[nk.get('name').upper()] = nk.get('externalId')
+
+    def _get_list_of_networkids(self):
+        """
+        Queries source ndex client with networkset passed in configuration to get
+        list of NDEx network UUIDs
+        :return:
+        """
+        res = self._sourcendex.get_network_set(self._sourcenetworkset)
+        if res is None:
+            logger.error('No networks found')
+            return None
+        if 'networks' not in res:
+            logger.error('No networks entry in result: ' + str(res))
+
+        return res['networks']
+
+    def _remap_raw_type_new_normalized_type(self, raw_type):
+        """
+        Uses map at top of this module to map raw_type
+        to new type. If no match, raw_type is passed on
+        :param raw_type:
+        :return:
+        """
+        if raw_type is None:
+            return None
+        if raw_type in TYPE_MAP:
+            return TYPE_MAP[raw_type]
+        return raw_type
+
+    def _process_network_by_id(self, networkid):
+        """
+        Processes network by id
+        :param networkid:
+        :return:
+        """
+        if networkid is None:
+            logger.error('network id is None')
+            return
+        network = ndex2.create_nice_cx_from_server(self._sourceserver, username=self._sourceuser,
+                                                   password=self._sourcepass,
+                                                   uuid=networkid)
+
+        logger.info('NETWORK: ' + network.get_name())
+        for id, node in network.get_nodes():
+            raw_type = network.get_node_attribute(id, 'WP.type')
+            if raw_type is None:
+                continue
+            raw_type = raw_type['v']
+            network.add_node_attribute(property_of=id, name='type',
+                                       values=self._remap_raw_type_new_normalized_type(raw_type),
+                                       overwrite=True)
+
+        # apply style to network
+        network.apply_style_from_network(self._template)
+
+        network_update_key = self._net_summaries.get(network.get_name().upper())
+
+        if network_update_key is not None:
+            return network.update_to(network_update_key, self._server, self._user, self._pass,
+                                     user_agent=self._get_user_agent())
+        else:
+            upload_message = network.upload_to(self._server, self._user,
+                                               self._pass,
+                                               user_agent=self._get_user_agent())
+        return upload_message
 
     def run(self):
         """
@@ -115,7 +261,23 @@ class NDExCPTACLoader(object):
         :return:
         """
         self._parse_config()
+        self._create_ndex_connection()
+        self._create_sourcendex_connection()
+        logger.debug('Parsed config: ' + self._user)
+        self._load_network_summaries_for_user()
+        self._load_style_template()
+
+        networklist = self._get_list_of_networkids()
+        if networklist is None:
+            logger.error('No networks')
+            return 1
+
+        for networkid in networklist:
+            logger.debug('Processing network: ' + networkid)
+            self._process_network_by_id(networkid)
+
         return 0
+
 
 def main(args):
     """
