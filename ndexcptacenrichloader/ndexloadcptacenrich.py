@@ -232,13 +232,20 @@ class NDExCPTACLoader(object):
 
         logger.info('NETWORK: ' + network.get_name())
         for id, node in network.get_nodes():
+
             raw_type = network.get_node_attribute(id, 'WP.type')
             if raw_type is None:
                 continue
             raw_type = raw_type['v']
-            network.add_node_attribute(property_of=id, name='type',
-                                       values=self._remap_raw_type_new_normalized_type(raw_type),
-                                       overwrite=True)
+
+            # some nodes have empty string for name which currently screws up enrichment
+            # so going to just set the type to something else for these right now
+            if 'n' not in node or node['n'] is None or len(node['n']) == 0:
+                network.add_node_attribute(property_of=id, name='type', values='unsetname' + raw_type, overwrite=True)
+            else:
+                network.add_node_attribute(property_of=id, name='type',
+                                           values=self._remap_raw_type_new_normalized_type(raw_type),
+                                           overwrite=True)
 
         # apply style to network
         network.apply_style_from_network(self._template)
