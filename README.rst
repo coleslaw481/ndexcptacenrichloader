@@ -16,7 +16,9 @@ NDEx Cancer Hallmark networks from CPTAC at WikiPathways Enrichment Loader
 
 
 
-Copies and converts Special collection of Cancer Hallmark networks from CPTAC at WikiPathways networks already loaded in NDEx so they can be used in Enrichment
+Copies and converts Special collection of Cancer Hallmark networks
+from CPTAC at WikiPathways networks already loaded in NDEx so they
+can be used in Enrichment.
 
 
 * Free software: BSD license
@@ -94,13 +96,11 @@ The default path for this configuration is :code:`~/.ndexutils.conf` but can be 
     user = <NDEx username>
     password = <NDEx password>
     server = <NDEx server(omit http) ie public.ndexbio.org>
-    style = <NDEx UUID of network to use for styling networks created>
+    source_user = <NDEx username for source networks>
+    source_password = <NDEx password for source networks>
+    source_server = <NDEx server(omit http) ie public.ndexbio.org for source networks>
+    source_networkset = <id of network set containing networks>
 
-
-The NDEx UUID needed for **style** can be obtained by uploading the :code:`style.cx` file found under
-the :code:`data/` directory of this repository. NOTE: The network needs to be uploaded to the same
-server as defined in **style** :code:`public.ndexbio.org` is NDEx_ production. Also the network needs
-to be visible to the **user**
 
 **Example configuration file**
 
@@ -111,7 +111,10 @@ to be visible to the **user**
     user = joe123
     password = somepassword123
     server = dev.ndexbio.org
-    style = 86f63bf8-1b48-11e9-a05d-525400c25d22
+    source_user = bob456
+    source_password = anotherpassword123
+    source_server = public.ndexbio.org
+    source_networkset = cf04cd21-b695-44b1-80c6-32952aaba2b9
 
 
 Needed files
