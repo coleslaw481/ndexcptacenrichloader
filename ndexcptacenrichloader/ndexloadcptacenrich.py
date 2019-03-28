@@ -241,6 +241,7 @@ class NDExCPTACLoader(object):
             # some nodes have empty string for name which currently screws up enrichment
             # so going to just set the type to something else for these right now
             if 'n' not in node or node['n'] is None or len(node['n']) == 0:
+                node['n'] = 'unset'
                 network.add_node_attribute(property_of=id, name='type', values='unsetname' + raw_type, overwrite=True)
             else:
                 network.add_node_attribute(property_of=id, name='type',
