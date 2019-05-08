@@ -23,6 +23,29 @@ TYPE_MAP = {'GeneProduct': 'protein',
             'Protein': 'protein',
             'Group': 'complex'}
 
+STYLE = 'style.cx'
+"""
+Name of file containing CX with style
+stored within this package
+"""
+
+
+def get_package_dir():
+    """
+    Gets directory where package is installed
+    :return:
+    """
+    return os.path.dirname(ndexcptacenrichloader.__file__)
+
+
+def get_style():
+    """
+    Gets the style stored with this package
+    :return: path to file
+    :rtype: string
+    """
+    return os.path.join(get_package_dir(), STYLE)
+
 
 def _parse_arguments(desc, args):
     """
@@ -52,8 +75,9 @@ def _parse_arguments(desc, args):
     parser.add_argument('--conf', help='Configuration file to load '
                                        '(default ~/' +
                                        NDExUtilConfig.CONFIG_FILE)
-    parser.add_argument('--style', help='Path to NDEx CX file to use for styling'
-                                        'networks', required=True)
+    parser.add_argument('--style',
+                        help='Path to NDEx CX file to use for styling '
+                             'networks', default=get_style())
     parser.add_argument('--verbose', '-v', action='count', default=0,
                         help='Increases verbosity of logger to standard '
                              'error for log messages in this module and'
@@ -309,12 +333,20 @@ def main(args):
     {user} = <NDEx username>
     {password} = <NDEx password>
     {server} = <NDEx server(omit http) ie public.ndexbio.org>
+    {sourceuser} = <NDEx username>
+    {sourcepass} = <NDEx password>
+    {sourceserver} = <NDEx server (omit http) ie public.ndexbio.org>
+    {sourcenetworksetid} = <networkset id containing networks to import>
     
     
     """.format(confname=NDExUtilConfig.CONFIG_FILE,
                user=NDExUtilConfig.USER,
                password=NDExUtilConfig.PASSWORD,
                server=NDExUtilConfig.SERVER,
+               sourceuser=NDExCPTACLoader.SOURCE_PREFIX + NDExUtilConfig.USER,
+               sourcepass=NDExCPTACLoader.SOURCE_PREFIX + NDExUtilConfig.PASSWORD,
+               sourceserver=NDExCPTACLoader.SOURCE_PREFIX + NDExUtilConfig.SERVER,
+               sourcenetworksetid=NDExCPTACLoader.SOURCE_PREFIX +NDExCPTACLoader.NETWORKSET,
                version=ndexcptacenrichloader.__version__)
     theargs = _parse_arguments(desc, args[1:])
     theargs.program = args[0]
